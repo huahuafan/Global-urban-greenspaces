@@ -1,2 +1,2 @@
 # Global-urban-greenspaces
-It includes all the code used in this manuscript
+Code for statistical analyses in the manuscript of " Soil biodiversity supports the delivery of multiple ecosystem functions in urban greenspaces worldwide".
