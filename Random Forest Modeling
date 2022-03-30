@@ -1,0 +1,102 @@
+ASVS <- read.delim('ASV_table.txt', row.names = 1)
+Gene <- read.delim('Gene_table.txt', row.names = 1)
+Functions <- read.delim('Multifunctionality.txt', row.names = 1)
+
+ASV <- data.frame(t(ASVS))
+ASV <- ASV[rownames(Functions), ]
+ASV <- cbind(ASV, Functions)
+set.seed(123)
+train <- sample(nrow(ASV), nrow(ASV)*0.7)
+ASV_train <- ASV[train, ]
+ASV_test <- ASV[-train, ]
+library(randomForest)
+set.seed(123)
+ASV_train.forest <- randomForest(Multifunctionality~., data = ASV_train, importance = TRUE)
+ASV_train.forest
+
+Function_predict <- predict(ASV_train.forest, ASV_train)
+
+plot(ASV_train$Multifunctionality, Function_predict, main = 'training',
+     xlab = 'Multifunctionality', ylab = 'Predict')
+abline(1, 1)
+
+Function_predict <- predict(ASV_train.forest, ASV_test)
+
+plot(ASV_test$Multifunctionality, Function_predict, main = 'testing',
+     xlab = 'Multifunctionality', ylab = 'Predict')
+abline(1, 1)
+
+#summary(ASV_train.forest)
+importance_ASV <- ASV_train.forest$importance
+head(importance_ASV)
+
+importance_ASV <- data.frame(importance(ASV_train.forest), check.names = FALSE)
+head(importance_ASV)
+
+varImpPlot(ASV_train.forest, n.var = min(30, nrow(ASV_train.forest$importance)),
+           main = 'Top 30 - variable importance')
+
+#“IncNodePurity”
+importance_ASV <- importance_ASV[order(importance_ASV$IncMSE, decreasing = TRUE), ]
+importance_ASV <- importance_ASV[order(importance_ASV$IncNodePurity, decreasing = TRUE), ]
+head(importance_ASV)
+write.table(importance_ASV, 'importance_ASV.txt', sep = 't', col.names = NA, quote = FALSE)
+
+set.seed(123)
+ASV_train.cv <- replicate(5, rfcv(ASV_train[-ncol(ASV_train)], ASV_train$Multifunctionality, cv.fold = 10, step = 1.5), simplify = FALSE)
+ASV_train.cv
+
+ASV_train.cv <- data.frame(sapply(ASV_train.cv, '[[', 'error.cv'))
+ASV_train.cv$ASVs <- rownames(ASV_train.cv)
+ASV_train.cv <- reshape2::melt(ASV_train.cv, id = 'ASVs')
+ASV_train.cv$ASVs <- as.numeric(as.character(ASV_train.cv$ASVs))
+
+ASV_train.cv.mean <- aggregate(ASV_train.cv$value, by = list(ASV_train.cv$ASVs), FUN = mean)
+head(ASV_train.cv.mean, 20)
+
+library(ggplot2)
+
+ggplot(ASV_train.cv.mean, aes(Group.1, x)) +
+  geom_line() +
+  theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent')) +
+  labs(title = '',x = 'Number of ASVs', y = 'Cross-validation error')
+
+importance_ASV <- importance_ASV[order(importance_ASV$IncNodePurity, decreasing = TRUE), ]
+
+importance_ASV.select <- importance_ASV[1:21, ]
+importance_ASV.select
+
+write.table(importance_ASV.select, 'importance_ASV.select.txt', sep = 't', col.names = NA, quote = FALSE)
+
+ASV_id.select <- rownames(importance_ASV.select)
+ASV.select <- ASV[ ,c(ASV_id.select, 'Multifunctionality')]
+ASV.select <- reshape2::melt(ASV.select, id = 'Multifunctionality')
+
+ggplot(ASV.select, aes(x = Multifunctionality, y = value)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~variable, ncol = 3, scale = 'free_y') +
+  labs(title = '',x = 'Multifunctionality', y = 'Relative abundance')
+
+ASV.select <- ASV[ ,c(ASV_id.select, 'Multifunctionality')]
+
+set.seed(123)
+train <- sample(nrow(ASV.select), nrow(ASV.select)*0.7)
+ASV_train.select <- ASV.select[train, ]
+ASV_test.select <- ASV.select[-train, ]
+
+set.seed(123)
+ASV_train.select.forest <- randomForest(Multifunctionality~., data = ASV_train.select, importance = TRUE)
+ASV_train.select.forest
+
+Function_predict <- predict(ASV_train.select.forest, ASV_train.select)
+
+plot(ASV_train.select$Multifunctionality, Function_predict, main = 'training',
+     xlab = 'Multifunctionality', ylab = 'Predict')
+abline(1, 1)
+
+Function_predict <- predict(ASV_train.select.forest, ASV_test.select)
+
+plot(ASV_test.select$Multifunctionality, Function_predict, main = 'testing',
+     xlab = 'Multifunctionality', ylab = 'Predict')
+abline(1, 1)
